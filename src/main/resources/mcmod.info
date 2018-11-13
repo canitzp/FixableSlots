@@ -1,0 +1,16 @@
+[
+{
+  "modid": "fixableslots",
+  "name": "Fixable Slots",
+  "description": "Set your inventory slots, so that only one item can be put into it.",
+  "version": "${version}",
+  "mcversion": "${mcversion}",
+  "url": "",
+  "updateUrl": "",
+  "authorList": ["canitzp"],
+  "credits": "The Forge and FML ",
+  "logoFile": "",
+  "screenshots": [],
+  "dependencies": []
+}
+]

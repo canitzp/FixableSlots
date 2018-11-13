@@ -1,0 +1,51 @@
+buildscript {
+    repositories {
+        jcenter()
+        maven { url = "http://files.minecraftforge.net/maven" }
+    }
+    dependencies {
+        classpath 'net.minecraftforge.gradle:ForgeGradle:2.3-SNAPSHOT'
+    }
+}
+apply plugin: 'net.minecraftforge.gradle.forge'
+//Only edit below this line, the above code adds and enables the necessary things for Forge to be setup.
+
+
+version = project.version
+group = "de.canitzp." + project.modid
+archivesBaseName = project.modname
+
+sourceCompatibility = targetCompatibility = '1.8' // Need this here so eclipse task generates correctly.
+compileJava {
+    sourceCompatibility = targetCompatibility = '1.8'
+}
+
+minecraft {
+    version = "1.12-14.21.1.2443"
+    runDir = "run"
+    mappings = "snapshot_20170624"
+    makeObfSourceJar = false
+}
+
+dependencies {}
+
+jar {
+    manifest {
+        attributes 'FMLCorePlugin': 'de.canitzp.fixableslots.ASMFixableSlots'
+        attributes 'FMLCorePluginContainsFMLMod': 'true'
+        attributes 'FMLAT': 'fixableslots_at.cfg'
+    }
+}
+
+processResources {
+    inputs.property "version", project.version
+    inputs.property "mcversion", project.minecraft.version
+
+    from(sourceSets.main.resources.srcDirs) {
+        include 'mcmod.info'
+        expand 'version':project.version, 'mcversion':project.minecraft.version
+    }
+    from(sourceSets.main.resources.srcDirs) {
+        exclude 'mcmod.info'
+    }
+}
