@@ -1,115 +1,117 @@
 package de.canitzp.fixableslots;
 
-import net.minecraft.block.state.IBlockState;
+import de.canitzp.fixableslots.mixin.AbstractContainerScreenInvoker;
+import de.canitzp.fixableslots.mixin.DimensionDataStorageInvoker;
+import net.fabricmc.api.EnvType;
+import net.fabricmc.api.ModInitializer;
+import net.fabricmc.fabric.api.event.lifecycle.v1.ServerWorldEvents;
+import net.fabricmc.loader.api.FabricLoader;
 import net.minecraft.client.Minecraft;
-import net.minecraft.client.gui.Gui;
-import net.minecraft.client.gui.inventory.GuiContainer;
-import net.minecraft.client.renderer.*;
-import net.minecraft.client.renderer.block.model.BakedQuad;
-import net.minecraft.client.renderer.block.model.IBakedModel;
-import net.minecraft.client.renderer.block.model.ItemCameraTransforms;
-import net.minecraft.client.renderer.texture.TextureManager;
-import net.minecraft.client.renderer.texture.TextureMap;
-import net.minecraft.client.renderer.texture.TextureUtil;
-import net.minecraft.client.renderer.tileentity.TileEntityItemStackRenderer;
-import net.minecraft.client.renderer.vertex.DefaultVertexFormats;
-import net.minecraft.entity.player.EntityPlayer;
-import net.minecraft.entity.player.EntityPlayerMP;
-import net.minecraft.entity.player.InventoryPlayer;
-import net.minecraft.inventory.Slot;
-import net.minecraft.item.ItemStack;
-import net.minecraft.nbt.NBTTagCompound;
-import net.minecraft.util.EnumFacing;
-import net.minecraft.util.NonNullList;
-import net.minecraftforge.client.event.GuiContainerEvent;
-import net.minecraftforge.common.util.Constants;
-import net.minecraftforge.fml.client.config.GuiUtils;
-import net.minecraftforge.fml.common.Mod;
-import net.minecraftforge.fml.common.event.FMLPreInitializationEvent;
-import net.minecraftforge.fml.common.eventhandler.SubscribeEvent;
-import net.minecraftforge.fml.common.gameevent.PlayerEvent;
-import net.minecraftforge.fml.common.network.simpleimpl.SimpleNetworkWrapper;
-import net.minecraftforge.fml.relauncher.Side;
-import net.minecraftforge.fml.relauncher.SideOnly;
-import org.lwjgl.input.Mouse;
+import net.minecraft.client.gui.GuiComponent;
+import net.minecraft.client.gui.screens.inventory.AbstractContainerScreen;
+import net.minecraft.core.NonNullList;
+import net.minecraft.nbt.CompoundTag;
+import net.minecraft.network.chat.Component;
+import net.minecraft.world.entity.player.Inventory;
+import net.minecraft.world.entity.player.Player;
+import net.minecraft.world.inventory.AbstractContainerMenu;
+import net.minecraft.world.inventory.Slot;
+import net.minecraft.world.item.ItemStack;
+import net.minecraft.world.level.dimension.DimensionType;
 
-import java.util.List;
+import java.io.File;
+import java.util.concurrent.atomic.AtomicLong;
 
 /**
  * @author canitzp
  */
-@Mod.EventBusSubscriber(modid = FixableSlots.MODID)
-@Mod(modid = FixableSlots.MODID, name = FixableSlots.MODNAME, version = FixableSlots.MODVERSION)
-public class FixableSlots {
+public class FixableSlots implements ModInitializer {
 
     public static final String MODID = "fixableslots";
-    public static final String MODNAME = "Fixable Slots";
-    public static final String MODVERSION = "@VERSION@";
 
-    public static SimpleNetworkWrapper NET = new SimpleNetworkWrapper(MODID);
-    
-    @Mod.EventHandler
-    public void preInit(FMLPreInitializationEvent event){
-        NET.registerMessage(PacketUpdateClientNBT.class, PacketUpdateClientNBT.class, 0, Side.CLIENT);
-        NET.registerMessage(PacketSetSlot.class, PacketSetSlot.class, 1, Side.SERVER);
-        NET.registerMessage(PacketLogin.class, PacketLogin.class, 2, Side.CLIENT);
-    }
-    
-    @SubscribeEvent
-    public static void onPlayerJoins(PlayerEvent.PlayerLoggedInEvent event){
-        if(event.player instanceof EntityPlayerMP){
-            NBTTagCompound playerNBT = event.player.getEntityData();
-            if(playerNBT.hasKey("FixableSlotsData", Constants.NBT.TAG_COMPOUND)){
-                NET.sendTo(new PacketLogin(playerNBT.getCompoundTag("FixableSlotsData")), (EntityPlayerMP) event.player);
-            }
+    @Override
+    public void onInitialize() {
+        EnvType environmentType = FabricLoader.getInstance().getEnvironmentType();
+        if (environmentType == EnvType.CLIENT) {
+            this.initializeClient();
         }
+        PacketSlotClick.register();
+
+        CustomEvents.PLAYER_LOGGED_IN_EVENT.register((connection, player) -> {
+            CompoundTag playerData = PlayerData.getOrCreatePlayerData(player);
+            PacketLogin.send(player, playerData);
+        });
+
+        ServerWorldEvents.LOAD.register((server, world) -> {
+            if (world.dimension().location().equals(DimensionType.OVERWORLD_EFFECTS)) {
+                File fixableSlotsFile = ((DimensionDataStorageInvoker) world.getDataStorage()).invokeGetDataFile("fixableSlots");
+                if (fixableSlotsFile.exists()) {
+                    PlayerData.read(fixableSlotsFile);
+                }
+            }
+        });
+        ServerWorldEvents.UNLOAD.register((server, world) -> {
+            if (world.dimension().location().equals(DimensionType.OVERWORLD_EFFECTS)) {
+                if (PlayerData.DATA.isEmpty()) {
+                    return;
+                }
+                File fixableSlotsFile = ((DimensionDataStorageInvoker) world.getDataStorage()).invokeGetDataFile("fixableSlots");
+                PlayerData.save(fixableSlotsFile);
+                PlayerData.DATA.clear(); // clear to delete all uuids and compounds before joining new world
+            }
+        });
+
     }
-    
-    private static long lastClick = 0; // hacky ftw
-    
-    @SideOnly(Side.CLIENT)
-    @SubscribeEvent
-    public static void drawGuiContainer(GuiContainerEvent.DrawForeground event){
-        GuiContainer gui = event.getGuiContainer();
-        for(Slot slot : gui.inventorySlots.inventorySlots){
-            if(slot.inventory instanceof InventoryPlayer){
-                EntityPlayer player = ((InventoryPlayer) slot.inventory).player;
-                if(!slot.getHasStack()){
-                    SlotType type = SaveHelper.getSlotType(player, slot.getSlotIndex());
-                    if(type != SlotType.VANILLA){
-                        GlStateManager.pushMatrix();
-                        Minecraft.getMinecraft().getRenderItem().zLevel = -90.0F;
-                        Minecraft.getMinecraft().getRenderItem().renderItemIntoGUI(SaveHelper.getSlotType(player, slot.getSlotIndex()).getRenderStack(SaveHelper.getStackForSlot(player, slot.getSlotIndex()), player, slot), slot.xPos, slot.yPos);
-                        GlStateManager.translate(0, 0, 20);
-                        Gui.drawRect(slot.xPos, slot.yPos, slot.xPos + 16, slot.yPos + 16, type.getColor());
-                        GlStateManager.popMatrix();
+
+    private void initializeClient(){
+        PacketUpdateClientNBT.register();
+        PacketLogin.register();
+
+        CustomClientEvents.AFTER_SCREEN_RENDER_EVENT.register((screen, poseStack, mouseX, mouseY, partialTicks) -> {
+            if (screen instanceof AbstractContainerScreen) {
+                AbstractContainerMenu menu = ((AbstractContainerScreen<?>) screen).getMenu();
+                for (Slot slot : menu.slots) {
+                    if (!slot.hasItem()) {
+                        if (slot.container instanceof Inventory) {
+                            Player player = ((Inventory) slot.container).player;
+                            SlotType type = SaveHelper.getSlotType(player, Util.getSlotIndex(slot));
+                            if (type != SlotType.VANILLA) {
+                                int left = Util.getScreenLeft((AbstractContainerScreen<?>) screen);
+                                int top = Util.getScreenTop((AbstractContainerScreen<?>) screen);
+                                poseStack.pushPose();
+                                poseStack.translate(left, top, 0D);
+                                Minecraft.getInstance().getItemRenderer().renderGuiItem(SaveHelper.getSlotType(player, Util.getSlotIndex(slot)).getRenderStack(SaveHelper.getStackForSlot(player, Util.getSlotIndex(slot)), player, slot), slot.x + left, slot.y + top);
+                                poseStack.translate(0, 0, 200);
+                                GuiComponent.fill(poseStack, slot.x, slot.y, slot.x + 16, slot.y + 16, type.getColor());
+                                if (((AbstractContainerScreenInvoker) screen).invokeIsHovering(slot, mouseX, mouseY)) {
+                                    NonNullList<Component> text = NonNullList.create();
+                                    type.addText(player, slot, text);
+                                    poseStack.translate(-left, -top, 0);
+                                    screen.renderTooltip(poseStack, Util.wrapText(text, screen.width), mouseX, mouseY);
+                                }
+                                poseStack.popPose();
+                            }
+                        }
                     }
                 }
             }
-        }
-    
-        Slot slot = gui.getSlotUnderMouse();
-        if(slot != null && slot.inventory instanceof InventoryPlayer){
-            EntityPlayer player = ((InventoryPlayer) slot.inventory).player;
-            SlotType type = SaveHelper.getSlotType(player, slot.getSlotIndex());
-            if(type != SlotType.VANILLA){
-                NonNullList<String> text = NonNullList.create();
-                type.addText(player, slot, text);
-                GlStateManager.pushMatrix();
-                GuiUtils.drawHoveringText(ItemStack.EMPTY, text, event.getMouseX() - gui.getGuiLeft(), event.getMouseY() - gui.getGuiTop(), gui.width - gui.getGuiLeft(), gui.height - gui.getGuiTop(), -1, Minecraft.getMinecraft().fontRenderer);
-                RenderHelper.enableGUIStandardItemLighting(); // cause hover texts aren't allowed this early
-                GlStateManager.popMatrix();
-            }
-            
-            if(Mouse.isButtonDown(2) && lastClick + 200 <= System.currentTimeMillis()){
-                lastClick = System.currentTimeMillis();
-                if(player.inventory.getItemStack().isEmpty() || type.getNextInOrder() == SlotType.VANILLA){
-                    NET.sendToServer(new PacketSetSlot(player, slot.getSlotIndex(), SlotType.VANILLA.ordinal(), ItemStack.EMPTY));
-                }else{
-                    NET.sendToServer(new PacketSetSlot(player, slot.getSlotIndex(), type.getNextInOrder().ordinal(), player.inventory.getItemStack()));
+        });
+
+        final AtomicLong lastClick = new AtomicLong(0); // hacky ftw
+        CustomClientEvents.SCREEN_MOUSE_CLICK_EVENT.register((screen, mouseX, mouseY, mouseButton) -> {
+            AbstractContainerMenu menu = screen.getMenu();
+            for (Slot slot : menu.slots) {
+                if (((AbstractContainerScreenInvoker) screen).invokeIsHovering(slot, mouseX, mouseY)) {
+                    if (slot.container instanceof Inventory) {
+                        if (mouseButton == 2 && lastClick.get() + 200 <= System.currentTimeMillis()) {
+                            lastClick.set(System.currentTimeMillis());
+                            PacketSlotClick.send(Util.getSlotIndex(slot), ((Inventory) slot.container).getCarried());
+                            return true;
+                        }
+                    }
                 }
             }
-        }
+            return false;
+        });
     }
-
 }

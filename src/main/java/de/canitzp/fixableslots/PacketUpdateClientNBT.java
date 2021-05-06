@@ -1,70 +1,62 @@
 package de.canitzp.fixableslots;
 
-import io.netty.buffer.ByteBuf;
+import net.fabricmc.api.EnvType;
+import net.fabricmc.api.Environment;
+import net.fabricmc.fabric.api.client.networking.v1.ClientPlayNetworking;
+import net.fabricmc.fabric.api.networking.v1.PacketByteBufs;
+import net.fabricmc.fabric.api.networking.v1.PacketSender;
+import net.fabricmc.fabric.api.networking.v1.ServerPlayNetworking;
 import net.minecraft.client.Minecraft;
-import net.minecraft.entity.player.EntityPlayer;
-import net.minecraft.nbt.NBTTagCompound;
-import net.minecraft.network.PacketBuffer;
-import net.minecraft.world.World;
-import net.minecraftforge.common.DimensionManager;
-import net.minecraftforge.common.util.Constants;
-import net.minecraftforge.fml.common.network.ByteBufUtils;
-import net.minecraftforge.fml.common.network.simpleimpl.IMessage;
-import net.minecraftforge.fml.common.network.simpleimpl.IMessageHandler;
-import net.minecraftforge.fml.common.network.simpleimpl.MessageContext;
-import net.minecraftforge.fml.relauncher.Side;
-import net.minecraftforge.fml.relauncher.SideOnly;
+import net.minecraft.client.multiplayer.ClientPacketListener;
+import net.minecraft.nbt.CompoundTag;
+import net.minecraft.network.FriendlyByteBuf;
+import net.minecraft.resources.ResourceLocation;
+import net.minecraft.server.level.ServerPlayer;
 
-public class PacketUpdateClientNBT implements IMessage, IMessageHandler<PacketUpdateClientNBT, IMessage>{
-    
-    private EntityPlayer player;
-    private int slotIndex;
-    private NBTTagCompound slotTag;
-    
-    public PacketUpdateClientNBT(){}
-    
-    public PacketUpdateClientNBT(EntityPlayer player, int slotIndex, NBTTagCompound slotTag){
-        this.player = player;
-        this.slotIndex = slotIndex;
-        this.slotTag = slotTag;
+public class PacketUpdateClientNBT {
+
+    public static final ResourceLocation NAME = new ResourceLocation(FixableSlots.MODID, "update_client_nbt");
+
+    @Environment(EnvType.CLIENT)
+    public static void register(){
+        ClientPlayNetworking.registerGlobalReceiver(NAME, PacketUpdateClientNBT::receive);
     }
-    
-    @Override
-    public void fromBytes(ByteBuf buf){
-        World world = DimensionManager.getWorld(buf.readInt());
-        if(world != null){
-            this.player = world.getPlayerEntityByUUID(new PacketBuffer(buf).readUniqueId());
+
+    public static void send(ServerPlayer player, int slotIndex, CompoundTag slotTag){
+        FriendlyByteBuf buf = PacketByteBufs.create();
+        buf.writeInt(slotIndex);
+        buf.writeNbt(slotTag);
+
+        ServerPlayNetworking.send(player, NAME, buf);
+    }
+
+    @Environment(EnvType.CLIENT)
+    public static void receive(Minecraft client, ClientPacketListener handler, FriendlyByteBuf buf, PacketSender responseSender) {
+        int slotIndex = buf.readInt();
+        CompoundTag slotTag = buf.readAnySizeNbt();
+        client.execute(new ClientRun(slotIndex, slotTag, client));
+    }
+
+    @Environment(EnvType.CLIENT)
+    private static class ClientRun implements Runnable {
+        private int slotIndex;
+        private CompoundTag slotTag;
+        private Minecraft client;
+
+        public ClientRun(int slotIndex, CompoundTag slotTag, Minecraft client) {
+            this.slotIndex = slotIndex;
+            this.slotTag = slotTag;
+            this.client = client;
         }
-        this.slotIndex = buf.readInt();
-        this.slotTag = ByteBufUtils.readTag(buf);
-    }
-    
-    @Override
-    public void toBytes(ByteBuf buf){
-        buf.writeInt(this.player.getEntityWorld().provider.getDimension());
-        new PacketBuffer(buf).writeUniqueId(this.player.getUniqueID());
-        buf.writeInt(this.slotIndex);
-        ByteBufUtils.writeTag(buf, this.slotTag);
-    }
-    
-    @SideOnly(Side.CLIENT)
-    @Override
-    public IMessage onMessage(PacketUpdateClientNBT message, MessageContext ctx){
-        if(message.player != null && message.slotTag != null){
-            EntityPlayer client = Minecraft.getMinecraft().player;
-            if(message.player.getUniqueID().equals(client.getUniqueID())){
-                Minecraft.getMinecraft().addScheduledTask(() -> {
-                    NBTTagCompound playerNBT = client.getEntityData();
-                    if(playerNBT.hasKey("FixableSlotsData", Constants.NBT.TAG_COMPOUND)){
-                        playerNBT.getCompoundTag("FixableSlotsData").setTag("Slot_" + message.slotIndex, message.slotTag);
-                    } else {
-                        NBTTagCompound data = new NBTTagCompound();
-                        data.setTag("Slot_" + message.slotIndex, message.slotTag);
-                        playerNBT.setTag("FixableSlotsData", data);
-                    }
-                });
+
+        @Override
+        public void run() {
+            CompoundTag fixableSlotsData = PlayerData.getOrCreateFixableSlotsData(client.player);
+            if (slotTag.isEmpty()) {
+                fixableSlotsData.remove("Slot_" + slotIndex);
+            } else {
+                fixableSlotsData.put("Slot_" + slotIndex, slotTag);
             }
         }
-        return null;
     }
 }

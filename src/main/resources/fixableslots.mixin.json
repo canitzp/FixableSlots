@@ -1,0 +1,28 @@
+{
+  "required": true,
+  "minVersion": "0.8",
+  "package": "de.canitzp.fixableslots.mixin",
+  "compatibilityLevel": "JAVA_8",
+  "mixins": [],
+  "client": [
+    "PlayerListMixin",
+    "ScreenMixin",
+    "SlotMixin",
+    "SlotAccessor",
+    "AbstractContainerScreenInvoker",
+    "DimensionDataStorageInvoker",
+    "AbstractContainerScreenMixin",
+    "SlotWrapperAccessor",
+    "InventoryMixin"
+  ],
+  "server": [
+    "PlayerListMixin",
+    "SlotMixin",
+    "SlotAccessor",
+    "DimensionDataStorageInvoker",
+    "InventoryMixin"
+  ],
+  "injectors": {
+    "defaultRequire": 1
+  }
+}
