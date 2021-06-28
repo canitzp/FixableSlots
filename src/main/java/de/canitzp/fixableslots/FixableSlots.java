@@ -105,7 +105,7 @@ public class FixableSlots implements ModInitializer {
                     if (slot.container instanceof Inventory) {
                         if (mouseButton == 2 && lastClick.get() + 200 <= System.currentTimeMillis()) {
                             lastClick.set(System.currentTimeMillis());
-                            PacketSlotClick.send(Util.getSlotIndex(slot), ((Inventory) slot.container).getCarried());
+                            PacketSlotClick.send(Util.getSlotIndex(slot), menu.getCarried());
                             return true;
                         }
                     }

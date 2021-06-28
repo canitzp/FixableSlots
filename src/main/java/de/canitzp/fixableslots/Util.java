@@ -57,7 +57,7 @@ public class Util{
     public static List<ResourceLocation> getMatchingTags(Item item){
         List<ResourceLocation> resourceLocations = new ArrayList<>();
         ItemTags.getAllTags().getAllTags().forEach((resourceLocation, itemTag) -> {
-            if(item.is(itemTag)){
+            if(itemTag.contains(item)){
                 resourceLocations.add(resourceLocation);
             }
         });

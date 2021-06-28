@@ -120,7 +120,8 @@ public enum SlotType {
             Collection<ResourceLocation> matchingTagLocations = Util.getMatchingTags(definition.getItem());
             if(matchingTagLocations.size() > tagIndex) {
                 ResourceLocation resLoc = new ArrayList<>(matchingTagLocations).get(tagIndex);
-                return stack.getItem().is(ItemTags.getAllTags().getTag(resLoc));
+                Tag<Item> tag = ItemTags.getAllTags().getTag(resLoc);
+                return tag != null && tag.contains(stack.getItem());
             }
             return Util.areStacksEqual(definition, stack);
         }
@@ -133,10 +134,13 @@ public enum SlotType {
             if(matchingTagLocations.size() > tagIndex){
                 ResourceLocation resLoc = new ArrayList<>(matchingTagLocations).get(tagIndex);
                 Tag<Item> matchingTag = ItemTags.getAllTags().getTag(resLoc);
+                if(matchingTag == null){
+                    return origin;
+                }
 
                 NonNullList<Item> tagItems = NonNullList.create();
                 Registry.ITEM.stream()
-                        .filter(item -> item.is(matchingTag))
+                        .filter(matchingTag::contains)
                         .filter(item -> !tagItems.contains(item))
                         .forEach(tagItems::add);
                 Item toRenderNow = tagItems.get(SlotType.getRenderFrameAsInt(player.level.getGameTime(), tagItems.size(), WAIT_TIME_BEFORE_RENDER_STACK_CHANGES_IN_TICKS));
