@@ -1,0 +1,28 @@
+{
+  "schemaVersion": 1,
+  "id": "fixableslots",
+  "version": "${version}",
+  "name": "FixableSlots",
+  "description": "",
+  "authors": [
+    "canitzp"
+  ],
+  "contact": {},
+  "license": "MIT",
+  "icon": "assets/fixableslots/icon.png",
+  "environment": "*",
+  "entrypoints": {
+    "main": [
+      "de.canitzp.fixableslots.FixableSlots"
+    ]
+  },
+  "mixins": [
+    "fixableslots.fabric.mixin.json"
+  ],
+  "accessWidener" : "fixableslots.accesswidener",
+  "depends": {
+    "fabricloader": ">=0.13.3",
+    "fabric": "*",
+    "minecraft": ">=1.18"
+  }
+}
