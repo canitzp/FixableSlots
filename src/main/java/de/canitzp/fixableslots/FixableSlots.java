@@ -17,6 +17,7 @@ import net.minecraft.entity.player.EntityPlayer;
 import net.minecraft.entity.player.EntityPlayerMP;
 import net.minecraft.entity.player.InventoryPlayer;
 import net.minecraft.inventory.Slot;
+import net.minecraft.item.Item;
 import net.minecraft.item.ItemStack;
 import net.minecraft.nbt.NBTTagCompound;
 import net.minecraft.util.EnumFacing;
@@ -47,26 +48,44 @@ public class FixableSlots {
     public static final String MODVERSION = "@VERSION@";
 
     public static SimpleNetworkWrapper NET = new SimpleNetworkWrapper(MODID);
-    
+
     @Mod.EventHandler
     public void preInit(FMLPreInitializationEvent event){
         NET.registerMessage(PacketUpdateClientNBT.class, PacketUpdateClientNBT.class, 0, Side.CLIENT);
         NET.registerMessage(PacketSetSlot.class, PacketSetSlot.class, 1, Side.SERVER);
         NET.registerMessage(PacketLogin.class, PacketLogin.class, 2, Side.CLIENT);
     }
-    
+
     @SubscribeEvent
     public static void onPlayerJoins(PlayerEvent.PlayerLoggedInEvent event){
         if(event.player instanceof EntityPlayerMP){
             NBTTagCompound playerNBT = event.player.getEntityData();
             if(playerNBT.hasKey("FixableSlotsData", Constants.NBT.TAG_COMPOUND)){
-                NET.sendTo(new PacketLogin(playerNBT.getCompoundTag("FixableSlotsData")), (EntityPlayerMP) event.player);
+                NBTTagCompound data = playerNBT.getCompoundTag("FixableSlotsData");
+                SaveHelper.lastPlayerData.put(event.player.getUniqueID(), data);
+                NET.sendTo(new PacketLogin(data), (EntityPlayerMP) event.player);
             }
         }
     }
-    
+
+    @SubscribeEvent
+    public static void onPlayerRespawn(PlayerEvent.PlayerRespawnEvent event){
+        if(event.player instanceof EntityPlayerMP && SaveHelper.lastPlayerData.containsKey(event.player.getUniqueID())){
+            EntityPlayerMP player = (EntityPlayerMP) event.player;
+            NBTTagCompound data = SaveHelper.lastPlayerData.get(player.getUniqueID());
+            player.getEntityData().setTag("FixableSlotsData", data);
+
+            for (String key : data.getKeySet()) {
+                NBTTagCompound slotTag = data.getCompoundTag(key);
+                int slotIndex = Integer.parseInt(key.substring(5));
+                SaveHelper.setSlot(player, slotIndex,slotTag.getInteger("Type"), new ItemStack(slotTag.getCompoundTag("Definition")));
+                NET.sendTo(new PacketUpdateClientNBT(player, slotIndex, slotTag), player);
+            }
+        }
+    }
+
     private static long lastClick = 0; // hacky ftw
-    
+
     @SideOnly(Side.CLIENT)
     @SubscribeEvent
     public static void drawGuiContainer(GuiContainerEvent.DrawForeground event){
@@ -87,7 +106,7 @@ public class FixableSlots {
                 }
             }
         }
-    
+
         Slot slot = gui.getSlotUnderMouse();
         if(slot != null && slot.inventory instanceof InventoryPlayer){
             EntityPlayer player = ((InventoryPlayer) slot.inventory).player;
@@ -100,7 +119,7 @@ public class FixableSlots {
                 RenderHelper.enableGUIStandardItemLighting(); // cause hover texts aren't allowed this early
                 GlStateManager.popMatrix();
             }
-            
+
             if(Mouse.isButtonDown(2) && lastClick + 200 <= System.currentTimeMillis()){
                 lastClick = System.currentTimeMillis();
                 if(player.inventory.getItemStack().isEmpty() || type.getNextInOrder() == SlotType.VANILLA){

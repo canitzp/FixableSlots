@@ -8,6 +8,8 @@ import net.minecraft.nbt.NBTTagCompound;
 import net.minecraftforge.common.util.Constants;
 
 import javax.annotation.Nonnull;
+import java.util.HashMap;
+import java.util.UUID;
 
 /**
  * @author canitzp
@@ -17,7 +19,7 @@ public class SaveHelper {
     public static boolean isItemValid(@Nonnull EntityPlayer player, int slotIndex, @Nonnull ItemStack stack){
         return getSlotType(player, slotIndex).isValid(getStackForSlot(player, slotIndex), stack);
     }
-    
+
     @Nonnull
     public static ItemStack getStackForSlot(@Nonnull EntityPlayer player, int slotIndex){
         NBTTagCompound nbt = player.getEntityData();
@@ -40,6 +42,8 @@ public class SaveHelper {
         return SlotType.VANILLA;
     }
 
+    public static HashMap<UUID, NBTTagCompound> lastPlayerData = new HashMap<>();
+
     public static void setSlot(@Nonnull EntityPlayer player, int slotIndex, int typeIndex, @Nonnull ItemStack definition){
         if(player instanceof EntityPlayerMP){ // should only be called on server side! Use 'PacketSetSlot' to call this from Client
             NBTTagCompound data, slotTag;
@@ -60,16 +64,17 @@ public class SaveHelper {
                 data = new NBTTagCompound();
                 slotTag = new NBTTagCompound();
             }
-    
+
             slotTag.setInteger("Type", typeIndex);
             NBTTagCompound def = new NBTTagCompound();
             definition.writeToNBT(def);
             slotTag.setTag("Definition", def);
-    
+
             FixableSlots.NET.sendTo(new PacketUpdateClientNBT(player, slotIndex, slotTag), (EntityPlayerMP) player);
-    
+
             data.setTag("Slot_" + slotIndex, slotTag);
             player.getEntityData().setTag("FixableSlotsData", data);
+            lastPlayerData.put(player.getUniqueID(), data);
         }
     }
 
