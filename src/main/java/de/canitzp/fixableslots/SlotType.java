@@ -44,7 +44,7 @@ public enum SlotType {
             tooltip.add("Exact mode");
             tooltip.add(TextFormatting.DARK_GRAY.toString() + "- No other item type can go into it");
             tooltip.add("");
-            tooltip.add(TextFormatting.GOLD.toString() + "Currently set to: \"" + stack.getItem().getRegistryName() + "/" + stack.getItemDamage() + "\" NBT:{" + (stack.hasTagCompound() ? stack.getTagCompound().getSize() + " entr(y|ies)" : "no entries") + "}");
+            tooltip.add(TextFormatting.GOLD.toString() + "Currently set to: "+stack.getCount()+"*\"" + stack.getItem().getRegistryName() + "/" + stack.getItemDamage() + "\" NBT:{" + (stack.hasTagCompound() ? stack.getTagCompound().getSize() + " entr(y|ies)" : "no entries") + "}");
         }
     },
     FUZY_LAZY_META { // only nbt has to match, meta is ignored
@@ -59,7 +59,8 @@ public enum SlotType {
             if(origin.getHasSubtypes()){
                 NonNullList<ItemStack> subs = NonNullList.create();
                 origin.getItem().getSubItems(CreativeTabs.SEARCH, subs);
-                return subs.get(SlotType.getRenderFrameAsInt(player.getEntityWorld().getTotalWorldTime(), subs.size(), WAIT_TIME_BEFORE_RENDER_STACK_CHANGES_IN_TICKS));
+                if (!subs.isEmpty())
+                    return subs.get(SlotType.getRenderFrameAsInt(player.getEntityWorld().getTotalWorldTime(), subs.size(), WAIT_TIME_BEFORE_RENDER_STACK_CHANGES_IN_TICKS));
             }
             return super.getRenderStack(origin, player, slot);
         }

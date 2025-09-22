@@ -1,26 +1,15 @@
 package de.canitzp.fixableslots;
 
-import net.minecraft.block.state.IBlockState;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.Gui;
 import net.minecraft.client.gui.inventory.GuiContainer;
 import net.minecraft.client.renderer.*;
-import net.minecraft.client.renderer.block.model.BakedQuad;
-import net.minecraft.client.renderer.block.model.IBakedModel;
-import net.minecraft.client.renderer.block.model.ItemCameraTransforms;
-import net.minecraft.client.renderer.texture.TextureManager;
-import net.minecraft.client.renderer.texture.TextureMap;
-import net.minecraft.client.renderer.texture.TextureUtil;
-import net.minecraft.client.renderer.tileentity.TileEntityItemStackRenderer;
-import net.minecraft.client.renderer.vertex.DefaultVertexFormats;
 import net.minecraft.entity.player.EntityPlayer;
 import net.minecraft.entity.player.EntityPlayerMP;
 import net.minecraft.entity.player.InventoryPlayer;
 import net.minecraft.inventory.Slot;
-import net.minecraft.item.Item;
 import net.minecraft.item.ItemStack;
 import net.minecraft.nbt.NBTTagCompound;
-import net.minecraft.util.EnumFacing;
 import net.minecraft.util.NonNullList;
 import net.minecraftforge.client.event.GuiContainerEvent;
 import net.minecraftforge.common.util.Constants;
@@ -34,7 +23,7 @@ import net.minecraftforge.fml.relauncher.Side;
 import net.minecraftforge.fml.relauncher.SideOnly;
 import org.lwjgl.input.Mouse;
 
-import java.util.List;
+import java.util.Optional;
 
 /**
  * @author canitzp
@@ -50,36 +39,48 @@ public class FixableSlots {
     public static SimpleNetworkWrapper NET = new SimpleNetworkWrapper(MODID);
 
     @Mod.EventHandler
-    public void preInit(FMLPreInitializationEvent event){
+    public void preInit(FMLPreInitializationEvent event) {
         NET.registerMessage(PacketUpdateClientNBT.class, PacketUpdateClientNBT.class, 0, Side.CLIENT);
         NET.registerMessage(PacketSetSlot.class, PacketSetSlot.class, 1, Side.SERVER);
         NET.registerMessage(PacketLogin.class, PacketLogin.class, 2, Side.CLIENT);
     }
 
     @SubscribeEvent
-    public static void onPlayerJoins(PlayerEvent.PlayerLoggedInEvent event){
-        if(event.player instanceof EntityPlayerMP){
+    public static void onPlayerJoins(PlayerEvent.PlayerLoggedInEvent event) {
+        if (!event.player.getEntityWorld().isRemote && event.player instanceof EntityPlayerMP) {
             NBTTagCompound playerNBT = event.player.getEntityData();
-            if(playerNBT.hasKey("FixableSlotsData", Constants.NBT.TAG_COMPOUND)){
+            if (playerNBT.hasKey("FixableSlotsData", Constants.NBT.TAG_COMPOUND)) {
                 NBTTagCompound data = playerNBT.getCompoundTag("FixableSlotsData");
-                SaveHelper.lastPlayerData.put(event.player.getUniqueID(), data);
+                synchronized (SaveHelper.lastPlayerData) {
+                    SaveHelper.lastPlayerData.put(event.player.getUniqueID(), data);
+                }
                 NET.sendTo(new PacketLogin(data), (EntityPlayerMP) event.player);
             }
         }
     }
 
     @SubscribeEvent
-    public static void onPlayerRespawn(PlayerEvent.PlayerRespawnEvent event){
-        if(event.player instanceof EntityPlayerMP && SaveHelper.lastPlayerData.containsKey(event.player.getUniqueID())){
+    public static void onPlayerRespawn(PlayerEvent.PlayerRespawnEvent event) {
+        if (!event.player.getEntityWorld().isRemote && event.player instanceof EntityPlayerMP) {
             EntityPlayerMP player = (EntityPlayerMP) event.player;
-            NBTTagCompound data = SaveHelper.lastPlayerData.get(player.getUniqueID());
-            player.getEntityData().setTag("FixableSlotsData", data);
+            Optional<NBTTagCompound> data = Optional.empty();
+            synchronized (SaveHelper.lastPlayerData) {
+                if (SaveHelper.lastPlayerData.containsKey(event.player.getUniqueID())) {
+                    NBTTagCompound realData = SaveHelper.lastPlayerData.get(player.getUniqueID());
+                    data = Optional.of(realData.copy());
+                }
+            }
 
-            for (String key : data.getKeySet()) {
-                NBTTagCompound slotTag = data.getCompoundTag(key);
-                int slotIndex = Integer.parseInt(key.substring(5));
-                SaveHelper.setSlot(player, slotIndex,slotTag.getInteger("Type"), new ItemStack(slotTag.getCompoundTag("Definition")));
-                NET.sendTo(new PacketUpdateClientNBT(player, slotIndex, slotTag), player);
+            if (data.isPresent()) {
+                player.getEntityData().setTag("FixableSlotsData", data.get().copy());
+                for (String key : data.get().getKeySet()) {
+                    if (key.length() > 5) {
+                        NBTTagCompound slotTag = data.get().getCompoundTag(key);
+                        int slotIndex = Integer.parseInt(key.substring(5));
+                        SaveHelper.setSlot(player, slotIndex, slotTag.getInteger("Type"), new ItemStack(slotTag.getCompoundTag("Definition")));
+                        NET.sendTo(new PacketUpdateClientNBT(player, slotIndex, slotTag), player);
+                    }
+                }
             }
         }
     }
@@ -88,14 +89,14 @@ public class FixableSlots {
 
     @SideOnly(Side.CLIENT)
     @SubscribeEvent
-    public static void drawGuiContainer(GuiContainerEvent.DrawForeground event){
+    public static void drawGuiContainer(GuiContainerEvent.DrawForeground event) {
         GuiContainer gui = event.getGuiContainer();
-        for(Slot slot : gui.inventorySlots.inventorySlots){
-            if(slot.inventory instanceof InventoryPlayer){
+        for (Slot slot : gui.inventorySlots.inventorySlots) {
+            if (slot.inventory instanceof InventoryPlayer) {
                 EntityPlayer player = ((InventoryPlayer) slot.inventory).player;
-                if(!slot.getHasStack()){
+                if (!slot.getHasStack()) {
                     SlotType type = SaveHelper.getSlotType(player, slot.getSlotIndex());
-                    if(type != SlotType.VANILLA){
+                    if (type != SlotType.VANILLA) {
                         GlStateManager.pushMatrix();
                         Minecraft.getMinecraft().getRenderItem().zLevel = -90.0F;
                         Minecraft.getMinecraft().getRenderItem().renderItemIntoGUI(SaveHelper.getSlotType(player, slot.getSlotIndex()).getRenderStack(SaveHelper.getStackForSlot(player, slot.getSlotIndex()), player, slot), slot.xPos, slot.yPos);
@@ -108,10 +109,10 @@ public class FixableSlots {
         }
 
         Slot slot = gui.getSlotUnderMouse();
-        if(slot != null && slot.inventory instanceof InventoryPlayer){
+        if (slot != null && slot.inventory instanceof InventoryPlayer) {
             EntityPlayer player = ((InventoryPlayer) slot.inventory).player;
             SlotType type = SaveHelper.getSlotType(player, slot.getSlotIndex());
-            if(type != SlotType.VANILLA){
+            if (type != SlotType.VANILLA) {
                 NonNullList<String> text = NonNullList.create();
                 type.addText(player, slot, text);
                 GlStateManager.pushMatrix();
@@ -120,11 +121,11 @@ public class FixableSlots {
                 GlStateManager.popMatrix();
             }
 
-            if(Mouse.isButtonDown(2) && lastClick + 200 <= System.currentTimeMillis()){
+            if (Mouse.isButtonDown(2) && lastClick + 200 <= System.currentTimeMillis()) {
                 lastClick = System.currentTimeMillis();
-                if(player.inventory.getItemStack().isEmpty() || type.getNextInOrder() == SlotType.VANILLA){
+                if (player.inventory.getItemStack().isEmpty() || type.getNextInOrder() == SlotType.VANILLA) {
                     NET.sendToServer(new PacketSetSlot(player, slot.getSlotIndex(), SlotType.VANILLA.ordinal(), ItemStack.EMPTY));
-                }else{
+                } else {
                     NET.sendToServer(new PacketSetSlot(player, slot.getSlotIndex(), type.getNextInOrder().ordinal(), player.inventory.getItemStack()));
                 }
             }
