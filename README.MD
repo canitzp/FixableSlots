@@ -17,7 +17,8 @@ To lock a slot to a specific item, just drag the itemstack and click the scroll 
 
 
 
-Showcase: [![](https://www.youtube.com/embed/x8CHhfYyhpg?wmode=transparent)](https://www.youtube.com/x8CHhfYyhpg)
+Showcase:
+<iframe width="560" height="315" src="https://www.youtube-nocookie.com/embed/x8CHhfYyhpg" title="YouTube video player" frameborder="0" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share" allowfullscreen></iframe>
 
 
 
