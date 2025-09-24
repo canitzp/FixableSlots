@@ -1,0 +1,13 @@
+{
+  "compatibilityLevel": "JAVA_8",
+  "package": "de.canitzp.fixableslots.mixins",
+  "refmap": "refmap.fixableslots.json",
+  "mixins": [
+    "ContainerMixin",
+    "InventoryPlayerMixin",
+    "SlotMixin"
+  ],
+  "client": [
+  ],
+  "server": []
+}
